@@ -1,5 +1,10 @@
 
-import { useState, useRef, useEffect } from "react";
+import { auth } from "./firebase"; // Ajuste o caminho do arquivo de configuração se necessário
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithEmailAndPassword 
+} from "firebase/auth";
+ import { useState, useRef, useEffect } from "react";
 
 // ─── APOSTILAS ───────────────────────────────────────────────────────────────
 const APOSTILAS = [
@@ -178,18 +183,24 @@ function SplashScreen() {
 function LoginScreen({ onLogin }) {
   const [mode, setMode] = useState("login");
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useRef ("");
   const [password, setPassword] = useState("");
   const [grade, setGrade] = useState("9º Ano");
   const [error, setError] = useState("");
   const [showPass, setShowPass] = useState(false);
 
-  const handleSubmit = () => {
-    setError("");
-    if (mode === "register") {
-      if (!name.trim()) return setError("Digite seu nome completo.");
-      if (!email.trim() || !email.includes("@")) return setError("Digite um e-mail válido.");
-      if (password.length < 6) return setError("A senha precisa ter no mínimo 6 caracteres.");
+  const handleSubmit = async () => {
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      const user = userCredential.user;
+
+      onLogin({ id: user.uid, email: user.email, name: name.trim(), grade: grade });
+    } catch (err) {
+      if (err.code === "auth/email-already-in-use") {
+        setError("Este e-mail já está cadastrado.");
+      } else {
+        setError("Erro ao cadastrar: " + err.message);
+      }
       const users = storage.getUsers();
       if (users[email.toLowerCase()]) return setError("Este e-mail já está cadastrado.");
       const newUser = { id: Date.now(), name: name.trim(), email: email.toLowerCase(), password, grade, avatar: rndAvatar(), color: rndColor() };
@@ -199,11 +210,18 @@ function LoginScreen({ onLogin }) {
     } else {
       if (!email.trim()) return setError("Digite seu e-mail.");
       if (!password) return setError("Digite sua senha.");
-      const users = storage.getUsers();
-      const found = users[email.toLowerCase()];
-      if (!found) return setError("E-mail não encontrado. Crie uma conta.");
-      if (found.password !== password) return setError("Senha incorreta. Tente novamente.");
-      onLogin(found);
+      try {
+        const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+        const user = userCredential.user;
+  
+        onLogin({ id: user.uid, email: user.email });
+      } catch (err) {
+        if (err.code === "auth/invalid-credential" || err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
+          setError("E-mail ou senha incorretos. Tente novamente.");
+        } else {
+          setError("Erro ao fazer login: " + err.message);
+        }
+      }
     }
   };
 
